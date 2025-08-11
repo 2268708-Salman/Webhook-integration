@@ -1,120 +1,93 @@
-import { NextRequest, NextResponse } from 'next/server';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { NextResponse } from 'next/server';
  
-export async function POST(req: NextRequest) {
-  console.log('🚀 Webhook received at:', new Date().toISOString());
- 
+export async function POST(req: Request) {
   try {
     const body = await req.json();
-    console.log('📦 Webhook payload:', JSON.stringify(body, null, 2));
+    console.log('Webhook received:', JSON.stringify(body, null, 2));
  
     const orderId = body?.data?.id;
-    console.log('🔍 Order ID:', orderId);
- 
     if (!orderId) {
-      return NextResponse.json({ error: 'Order ID missing' }, { status: 400 });
+      return NextResponse.json({ error: 'Order ID missing in webhook payload' }, { status: 400 });
     }
  
-    const storeHash = process.env.BC_STORE_HASH;
-    const token = process.env.BC_API_TOKEN;
-    const b2bToken = process.env.BC_B2B_API_TOKEN;
+    // Fetch order details
+    const orderRes = await fetch(
+`https://api.bigcommerce.com/stores/${process.env.BC_STORE_HASH}/v2/orders/${orderId}`,
+      {
+        headers: {
+          'X-Auth-Token': process.env.BC_ACCESS_TOKEN as string,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      }
+    );
+    const orderData: any = await orderRes.json();
  
-    if (!storeHash || !token || !b2bToken) {
-      console.error('❌ Missing required BigCommerce credentials');
-      return NextResponse.json({ error: 'Missing BigCommerce credentials' }, { status: 500 });
-    }
+    // Fetch products for the order
+    const productsRes = await fetch(
+`https://api.bigcommerce.com/stores/${process.env.BC_STORE_HASH}/v2/orders/${orderId}/products`,
+      {
+        headers: {
+          'X-Auth-Token': process.env.BC_ACCESS_TOKEN as string,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      }
+    );
+    const productsData: any = await productsRes.json();
  
-    const headers = {
-      'X-Auth-Token': token,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    };
+    // Fetch customer details
+    const customerRes = await fetch(
+`https://api.bigcommerce.com/stores/${process.env.BC_STORE_HASH}/v2/customers/${orderData.customer_id}`,
+      {
+        headers: {
+          'X-Auth-Token': process.env.BC_ACCESS_TOKEN as string,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+      }
+    );
+    const customerData: any = await customerRes.json();
  
-const baseUrl = `https://api.bigcommerce.com/stores/${storeHash}/v2/orders/${orderId}`;
+    // Fetch B2B company details
+    const companiesRes = await fetch(
+`https://api-b2b.bigcommerce.com/api/v3/io/companies`,
+      {
+        headers: {
+          'X-Auth-Client': process.env.BC_B2B_CLIENT_ID as string,
+          'X-Auth-Token': process.env.BC_B2B_ACCESS_TOKEN as string,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+    const companiesData: any = await companiesRes.json();
  
-    // Step 1: Get main order
-    console.log('📡 Fetching main order details...');
-    const orderRes = await fetch(baseUrl, { headers });
-    if (!orderRes.ok) {
-      return NextResponse.json({ error: `Order fetch failed: ${orderRes.status}` }, { status: 500 });
-    }
-    const orderDetails = await orderRes.json();
- 
-    // Step 2: Get sub-data
-    const subEndpoints = ['products', 'fees', 'shipping_addresses', 'consignments', 'coupons'];
-    const subData: Record<string, unknown> = {};
- 
-    await Promise.all(
-      subEndpoints.map(async (key) => {
-        try {
-          const res = await fetch(`${baseUrl}/${key}`, { headers });
-          subData[key] = res.ok ? await res.json() : { error: `Failed to fetch ${key}` };
-        } catch {
-          subData[key] = { error: `Exception while fetching ${key}` };
-        }
-      })
+    const matchedCompany = companiesData?.data?.find(
+      (company: any) =>
+        company?.name?.toLowerCase() === customerData?.company?.toLowerCase()
     );
  
-    // Step 3: Get customer details
-    const customerId = orderDetails.customer_id;
-    let customerDetails = null;
-    if (customerId) {
-      console.log(`📡 Fetching customer details for ID ${customerId}...`);
-      const customerRes = await fetch(
-`https://api.bigcommerce.com/stores/${storeHash}/v2/customers/${customerId}`,
-        { headers }
-      );
-      if (customerRes.ok) {
-        customerDetails = await customerRes.json();
-      }
-    }
+    const companyId = matchedCompany?.id || null;
+    const e8CompanyId =
+matchedCompany?.extraFields?.find((f: any) => f.name === 'E8 Company ID')
+        ?.value || null;
  
-    // Step 4: Get company details from B2B API
-    let companyDetails = null;
-    let e8CompanyId = null;
-    if (customerDetails?.company) {
-console.log(`📡 Fetching B2B company info for "${customerDetails.company}"...`);
-      const b2bRes = await fetch(
-`https://api-b2b.bigcommerce.com/api/v3/io/companies?name=${encodeURIComponent(
-customerDetails.company
-        )}`,
-        {
-          headers: {
-            'X-Auth-Token': b2bToken,
-            'Content-Type': 'application/json',
-            Accept: 'application/json',
-          },
-        }
-      );
+    console.log('Order:', orderData);
+    console.log('Products:', productsData);
+    console.log('Customer:', customerData);
+    console.log('Company ID:', companyId);
+    console.log('E8 Company ID:', e8CompanyId);
  
-      if (b2bRes.ok) {
-        const b2bData = await b2bRes.json();
-        if (b2bData?.data?.length) {
-          companyDetails = b2bData.data[0];
-          e8CompanyId = companyDetails?.extraFields?.find(
-(field: any) => field.name === 'E8 Company ID'
-          )?.value;
-        }
-      }
-    }
- 
-    // Combine all data
-    const fullOrder = {
-      ...orderDetails,
-      ...subData,
-      customer: customerDetails,
-      company: companyDetails
-        ? {
-id: companyDetails.id,
-name: companyDetails.name,
-            e8CompanyId,
-          }
-        : null,
-    };
- 
-    console.log('✅ Final Webhook Data:', JSON.stringify(fullOrder, null, 2));
-    return NextResponse.json({ message: 'Order processed', order: fullOrder });
-  } catch (error) {
-    console.error('❌ Webhook processing error:', error);
+    return NextResponse.json({
+      order: orderData,
+      products: productsData,
+      customer: customerData,
+      companyId,
+      e8CompanyId,
+    });
+  } catch (err) {
+    console.error('Error in webhook handler:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
