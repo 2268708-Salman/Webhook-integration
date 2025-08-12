@@ -89,7 +89,7 @@ export async function POST(req: Request) {
  
     // Fetch Company from B2B API using customer.company name
     let companyId: number | null = null;
-    let e8CompanyId: string | null = null;
+    // let e8CompanyId: string | null = null;
  
     if (customer.company) {
       const companyRes = await fetch(`https://api-b2b.bigcommerce.com/api/v3/io/companies?name=${encodeURIComponent(customer.company)}`, {
@@ -131,7 +131,7 @@ export async function POST(req: Request) {
       products,
       customer,
       companyId,
-      e8CompanyId,
+    //   e8CompanyId,
     });
  
   } catch (error) {
