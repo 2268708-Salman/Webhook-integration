@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { NextResponse } from 'next/server';
  
 type Product = {
@@ -51,7 +50,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: false, error: 'Order ID not found in payload' });
     }
  
-    // 1. Fetch Order Details
+    // 1. Fetch Order Details (Store API - X-Auth-Token)
 const orderRes = await fetch(`https://api.bigcommerce.com/stores/${process.env.BC_STORE_HASH}/v2/orders/${orderId}`, {
       headers: {
         'X-Auth-Token': process.env.BC_API_TOKEN as string,
@@ -62,7 +61,7 @@ const orderRes = await fetch(`https://api.bigcommerce.com/stores/${process.env.B
     const order: Order = await orderRes.json();
     console.log('Order Details:', order);
  
-    // 2. Fetch Products in the Order
+    // 2. Fetch Products in the Order (Store API - X-Auth-Token)
 const productsRes = await fetch(`https://api.bigcommerce.com/stores/${process.env.BC_STORE_HASH}/v2/orders/${orderId}/products`, {
       headers: {
         'X-Auth-Token': process.env.BC_API_TOKEN as string,
@@ -73,7 +72,7 @@ const productsRes = await fetch(`https://api.bigcommerce.com/stores/${process.en
     const products: Product[] = await productsRes.json();
     console.log('Products:', products);
  
-    // 3. Fetch Customer Details
+    // 3. Fetch Customer Details (Store API - X-Auth-Token)
 const customerRes = await fetch(`https://api.bigcommerce.com/stores/${process.env.BC_STORE_HASH}/v2/customers/${order.customer_id}`, {
       headers: {
         'X-Auth-Token': process.env.BC_API_TOKEN as string,
@@ -84,7 +83,7 @@ const customerRes = await fetch(`https://api.bigcommerce.com/stores/${process.en
     const customer: Customer = await customerRes.json();
     console.log('Customer:', customer);
  
-    // 4. If company name exists, get company details
+    // 4. If company name exists, get company details (B2B API - OAuth Bearer)
     let company: Company | null = null;
     let companyId: number | null = null;
     let e8CompanyId: string | null = null;
@@ -93,7 +92,7 @@ if (customer.company) {
       // Find company by name
 const companiesRes = await fetch(`https://api-b2b.bigcommerce.com/api/v3/io/companies?name=${encodeURIComponent(customer.company)}`, {
         headers: {
-          'X-Auth-Token': process.env.BC_B2B_API_TOKEN as string,
+          Authorization: `Bearer ${process.env.BC_B2B_AUTH_TOKEN}`, // <-- Auth token here
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
@@ -107,7 +106,7 @@ companyId = company.id;
         // Fetch company by ID to get E8 Company ID
 const companyDetailRes = await fetch(`https://api-b2b.bigcommerce.com/api/v3/io/companies/${companyId}`, {
           headers: {
-            'X-Auth-Token': process.env.BC_B2B_API_TOKEN as string,
+            Authorization: `Bearer ${process.env.BC_B2B_AUTH_TOKEN}`, // <-- Auth token here
             'Content-Type': 'application/json',
             Accept: 'application/json',
           },
