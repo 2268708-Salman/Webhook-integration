@@ -119,9 +119,9 @@ export async function POST(req: Request) {
         const companyDetailJson = await companyDetailRes.json();
         const companyDetail: CompanyDetail = companyDetailJson.data;
  
-        const e8Field = companyDetail.extraFields?.find(field => field.fieldName === 'E8 COMPANY ID');
-        e8CompanyId = e8Field?.fieldValue || null;
-        console.log('E8 Company ID:', e8CompanyId);
+        // const e8Field = companyDetail.extraFields?.find(field => field.fieldName === 'E8 COMPANY ID');
+        // e8CompanyId = e8Field?.fieldValue || null;
+        // console.log('E8 Company ID:', e8CompanyId);
       }
     }
  
